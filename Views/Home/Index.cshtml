@@ -1,0 +1,115 @@
+﻿@{
+    ViewData["Title"] = "Home Page";
+}
+<div class="container">
+    <div class="row" style="margin:10px;">
+        <div class="col col-lg-2">
+            <form method="post">
+                <div class="form-group">
+                    <label for="label">Label</label>
+                    <input type="text" class="form-control" id="label" name="label">
+                </div>
+                <div class="form-group">
+                    <label for="description">Description</label>
+                    <input type="text" class="form-control" id="description" name="description">
+                </div>
+                <div class="form-group">
+                    <label for="latitude">Latitude</label>
+                    <input type="text" class="form-control" id="latitude" name="latitude">
+                </div>
+                <div class="form-group">
+                    <label for="longitude">Longitude</label>
+                    <input type="text" class="form-control" id="longitude" name="longitude">
+                </div>
+                <button type="button" class="btn btn-primary" id="submitButton">Add pin</button>
+            </form>
+        </div>
+        <div class="col col-md-auto">
+            <div id="googleMap" style="height:500px;width:auto"></div>
+        </div>
+    </div>
+</div>
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+<script src="~/lib/signalr/dist/browser/signalr.js"></script>
+<script>
+    var map;
+    var locations = [];
+    function getLocations() {
+        $.ajax({
+            type: 'GET',
+            url: "/api/Locations",
+            dataType: 'json',
+            success: function (data) {
+                locations = data;
+                placeMarkers();
+            }
+        });
+    }
+
+    function placeMarkers() {
+        for (var i = 0; i < locations.length; i++) {
+            var model = { label: locations[i].label, description: locations[i].description, latitude: locations[i].latitude, longitude: locations[i].longitude };
+            createMarker(model);
+        }
+    }
+    function createMarker(model) {
+            var infowindow = new google.maps.InfoWindow();
+            var marker = new google.maps.Marker({
+                position: new google.maps.LatLng(model.latitude, model.longitude),
+                map: map,
+                title: model.label
+            });
+
+
+            google.maps.event.addListener(marker, 'click', (function (marker) {
+                return function () {
+                    infowindow.setContent(model.description);
+                    infowindow.open(map, marker);
+                }
+            })(marker));
+
+    }
+
+    function myMap() {
+        var myCenter = new google.maps.LatLng(50.026873, 19.954324);
+        var mapProp = { center: myCenter, zoom: 13, scrollwheel: true, draggable: true, mapTypeId: google.maps.MapTypeId.ROADMAP };
+        map = new google.maps.Map(document.getElementById("googleMap"), mapProp);
+
+        google.maps.event.addListener(map, "click", function (e) {
+            var latitude = e.latLng.lat();
+            var longitude = e.latLng.lng();
+            document.getElementById("latitude").value = latitude;
+            document.getElementById("longitude").value = longitude;
+        });
+        getLocations();
+    }
+
+    var connection= new signalR.HubConnectionBuilder().withUrl("/signalRHub").build();
+    connection.on("ReceiveMessage", function (model) {
+        createMarker(model);
+    });
+    connection.start();
+
+
+    $("#submitButton").on('click', function () {
+        var label = $("#label").val();
+        var description = $("#description").val();
+        var latitude = $("#latitude").val();
+        var longitude = $("#longitude").val();
+        var model = { label: label, description: description, latitude: latitude, longitude: longitude };
+        connection.invoke("SendMessage", model).catch(function (err) {
+            return console.error(err.toString());
+        });
+        $.ajax({
+            type: 'POST',
+            url: '/api/Locations',
+            data: model,
+            success: function () {
+                getLocations();
+            }
+        });
+    });
+</script>
+
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBSTPvhATsDvbpeROhCBkwvHHagxK8n5Wg&callback=myMap"></script>
